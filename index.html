@@ -4,184 +4,310 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#17202a">
-<meta name="description" content="BLE route controller for the mini police robot car">
+<meta name="description" content="BLE route and joystick controller for the mini police robot car">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
-<title>Police Car BLE Controller</title>
+<title>Police Car Controller</title>
 <style>
-:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#eef2f6}
-body{margin:0;padding:16px;max-width:920px;margin-inline:auto}
-h1{font-size:1.35rem;margin:.3rem 0 1rem}
-.card{background:white;border-radius:14px;padding:14px;margin:12px 0;box-shadow:0 2px 10px #17202a12}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-button{border:0;border-radius:10px;padding:11px 14px;background:#1e6bd6;color:white;font-weight:650;font-size:.95rem}
-button.secondary{background:#566575}button.stop{background:#b72a35}button:disabled{opacity:.45}
-label{font-size:.9rem;color:#425466}input{padding:8px;border:1px solid #ccd5df;border-radius:8px;width:90px}
-#map{width:100%;height:auto;background:#fbfcfe;border:1px solid #d8e0e8;border-radius:10px;touch-action:manipulation}
-#log{height:105px;overflow:auto;background:#101820;color:#d5e5ef;padding:9px;border-radius:8px;font:12px ui-monospace,monospace;white-space:pre-wrap}
-.status{font-weight:700}.muted{font-size:.82rem;color:#657786}.danger{color:#b72a35;font-weight:700}
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#eef2f6;color-scheme:light;--blue:#1e6bd6;--green:#18865f;--red:#b72a35;--muted:#617386;--line:#dce4ec}
+*{box-sizing:border-box}body{margin:0;padding:14px 13px calc(22px + env(safe-area-inset-bottom));max-width:820px;margin-inline:auto}
+h1{font-size:1.32rem;margin:5px 0 12px}.subtitle{color:var(--muted);font-size:.84rem;margin:-5px 0 12px}
+.card{background:#fff;border-radius:15px;padding:14px;margin:12px 0;box-shadow:0 2px 10px #17202a10;border:1px solid #e9eef3}
+.section-title{font-weight:800;font-size:1rem;margin-bottom:8px}.muted{font-size:.82rem;line-height:1.45;color:var(--muted)}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{border:0;border-radius:10px;padding:11px 13px;background:var(--blue);color:white;font-weight:700;font-size:.92rem;min-height:42px}button.secondary{background:#586a7d}button.green{background:var(--green)}button.stop{background:var(--red)}button:disabled{opacity:.42}
+input,select{font:inherit;border:1px solid #cbd5df;border-radius:9px;padding:9px;background:white;color:#17202a;min-height:40px}input[type=number]{width:100%;min-width:0}input[type=range]{width:100%;accent-color:var(--blue)}
+label{font-size:.83rem;font-weight:650;color:#435365;display:block}.field{display:grid;gap:5px;min-width:0;flex:1}.field small{font-size:.73rem;color:var(--muted);font-weight:500}
+.status-line{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.pill{display:inline-flex;align-items:center;border-radius:999px;padding:5px 10px;background:#edf2f7;color:#425466;font-weight:750;font-size:.78rem}.pill.ok{background:#e3f5ec;color:#116b49}.pill.bad{background:#fde9e9;color:#a7222b}
+.pose-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.pose-cell{background:#f4f7fa;border-radius:11px;padding:10px 9px;min-width:0}.pose-label{font-size:.72rem;color:var(--muted);font-weight:750}.pose-value{font-size:1.08rem;font-weight:850;font-variant-numeric:tabular-nums;white-space:nowrap;margin-top:3px}.pose-value small{font-size:.68rem;font-weight:650;color:var(--muted)}
+.axis-note{background:#f5f8fb;border-radius:10px;padding:10px;margin:10px 0;font-size:.82rem;line-height:1.5}.axis-note b{color:#142e4b}
+#map{display:block;width:100%;height:auto;aspect-ratio:720/560;background:#fbfcfe;border:1px solid var(--line);border-radius:11px;touch-action:manipulation}
+.map-legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 2px;font-size:.76rem;color:var(--muted)}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}
+.coord-entry{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-top:12px}.coord-list{display:grid;gap:6px;margin-top:10px}.coord-item{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-size:.84rem}.coord-item .coord-text{font-variant-numeric:tabular-nums;font-weight:700}.coord-item .coord-type{font-size:.72rem;color:var(--muted);min-width:55px}.coord-item button{min-height:32px;padding:5px 9px;font-size:.78rem}
+.route-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}.route-actions button{flex:1 1 auto}
+.joy-layout{display:grid;grid-template-columns:minmax(0,280px) minmax(120px,1fr);align-items:center;gap:14px;justify-content:center}.joy-wrap{display:flex;justify-content:center;align-items:center}.joystick{position:relative;width:min(68vw,260px);height:min(68vw,260px);max-width:260px;max-height:260px;border-radius:50%;border:2px solid #bdcbd9;background:radial-gradient(circle,#f8fafc 0 34%,#e7edf4 35% 69%,#d5dee8 70% 100%);box-shadow:inset 0 3px 12px #24364b18,0 3px 10px #24364b12;touch-action:none;user-select:none;-webkit-user-select:none}
+.joystick:before,.joystick:after{content:"";position:absolute;background:#aebdcb;opacity:.65}.joystick:before{width:1px;height:82%;left:50%;top:9%}.joystick:after{height:1px;width:82%;top:50%;left:9%}
+.joy-direction{position:absolute;font-size:.7rem;font-weight:800;color:#5c6f82;pointer-events:none}.joy-up{top:8px;left:50%;transform:translateX(-50%)}.joy-down{bottom:8px;left:50%;transform:translateX(-50%)}.joy-left{left:8px;top:50%;transform:translateY(-50%)}.joy-right{right:8px;top:50%;transform:translateY(-50%)}
+.joy-knob{position:absolute;left:50%;top:50%;width:74px;height:74px;margin:-37px 0 0 -37px;border-radius:50%;background:linear-gradient(145deg,#438ce5,#185cb4);border:3px solid white;box-shadow:0 4px 14px #133b6c55;pointer-events:none;z-index:2}
+.joy-readout{display:grid;gap:8px}.readout{background:#f4f7fa;border-radius:10px;padding:10px}.readout-label{font-size:.73rem;color:var(--muted);font-weight:750}.readout-value{font-size:1rem;font-weight:850;font-variant-numeric:tabular-nums;margin-top:2px}
+#log{height:115px;overflow:auto;background:#101820;color:#d5e5ef;padding:10px;border-radius:9px;font:12px/1.5 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap}
+.danger-note{color:#a7222b;font-size:.78rem;font-weight:650;line-height:1.45}
+@media(max-width:520px){body{padding:10px 9px calc(20px + env(safe-area-inset-bottom))}.card{padding:12px}.pose-grid{gap:5px}.pose-cell{padding:8px 6px}.pose-value{font-size:.96rem}.joy-layout{grid-template-columns:1fr}.joy-readout{grid-template-columns:repeat(3,1fr)}.readout{padding:8px 6px}.readout-value{font-size:.9rem}.coord-entry{grid-template-columns:1fr 1fr}.coord-entry button{grid-column:1/-1}}
 </style>
 </head>
 <body>
-<h1>경찰차 BLE 경로 컨트롤러</h1>
-<div class="card">
-  <div class="row">
+<h1>🚓 Police Car Controller</h1>
+<p class="subtitle">XIAO ESP32-S3 Sense · OpenRB-150 · XC430 × 2</p>
+
+<section class="card">
+  <div class="status-line">
     <button id="connect">XIAO 연결</button>
     <button id="disconnect" class="secondary" disabled>연결 해제</button>
-    <span class="status" id="bleState">연결 안 됨</span>
+    <span id="bleState" class="pill">BLE 연결 안 됨</span>
+    <span id="robotState" class="pill">차량 상태 확인 중</span>
   </div>
-  <p class="muted">Android Chrome 권장. BLE 연결은 HTTPS 또는 localhost에서 동작합니다. 차량은 정지한 상태에서 먼저 연결하세요.</p>
-  <div>차량 상태: <span id="robotState" class="status">알 수 없음</span></div>
-  <div class="muted" id="poseText">x=0, y=0, heading=0°</div>
-</div>
-<div class="card">
-  <strong>경로 편집</strong>
-  <p class="muted">격자 화면을 눌러 경유점을 추가하세요. 화면 위쪽이 차량 전방(+X), 화면 왼쪽이 차량 좌측(+Y)입니다. 시작점은 (0,0)으로 고정됩니다.</p>
-  <canvas id="map" width="720" height="520"></canvas>
-  <div class="row" style="margin-top:10px">
-    <label>속도 <input id="speed" type="number" min="30" max="100" step="10" value="80"> mm/s</label>
-    <button id="undo" class="secondary">마지막 점 취소</button>
-    <button id="clear" class="secondary">경로 초기화</button>
-    <span class="muted" id="pointsCount">1 / 16 점</span>
+  <div class="pose-grid" aria-live="polite">
+    <div class="pose-cell"><div class="pose-label">현재 X · 전후</div><div class="pose-value" id="poseX">+0.0 <small>mm</small></div></div>
+    <div class="pose-cell"><div class="pose-label">현재 Y · 좌우</div><div class="pose-value" id="poseY">+0.0 <small>mm</small></div></div>
+    <div class="pose-cell"><div class="pose-label">방향각 θ</div><div class="pose-value" id="poseHeading">+0.0 <small>°</small></div></div>
   </div>
-  <div class="row" style="margin-top:10px">
-    <button id="upload">경로 전송</button>
-    <button id="start">START</button>
-    <button id="stop" class="stop">STOP</button>
+  <div class="axis-note"><b>좌표 기준 (차량 기준 상대좌표, mm)</b><br>원점 (0, 0) = <b>현재 위치를 원점으로</b> 버튼을 누른 지점 · +X = 전방 · −X = 후방 · +Y = 좌측 · −Y = 우측 · θ=0°는 +X 방향</div>
+  <div class="muted" id="telemetryText">엔코더 위치 정보 대기 중 · 경로점 0 / 0</div>
+</section>
+
+<section class="card">
+  <div class="section-title">1. 경로 설정</div>
+  <p class="muted">격자를 누르면 경유점이 추가돼. 또는 아래 X/Y 입력칸에 mm 단위 좌표를 직접 입력해. 시작점 P0=(0,0)은 현재 오도메트리 원점이야.</p>
+  <canvas id="map" width="720" height="560" aria-label="차량 좌표계 및 경로 편집 격자"></canvas>
+  <div class="map-legend"><span><i class="dot" style="background:#1e6bd6"></i>P0 시작점</span><span><i class="dot" style="background:#18865f"></i>경유점</span><span><i class="dot" style="background:#ef922b"></i>현재 차량</span></div>
+  <div class="coord-entry">
+    <div class="field"><label for="coordX">X 좌표 <small>+전방 / −후방</small></label><input id="coordX" type="number" min="-5000" max="5000" step="10" value="500"></div>
+    <div class="field"><label for="coordY">Y 좌표 <small>+좌측 / −우측</small></label><input id="coordY" type="number" min="-5000" max="5000" step="10" value="0"></div>
+    <button id="addCoord" class="green">좌표 추가</button>
+  </div>
+  <div class="coord-list" id="pointList"></div>
+  <div class="row" style="margin-top:10px;align-items:end">
+    <div class="field" style="max-width:180px"><label for="routeSpeed">경로 최대 속도 (mm/s)</label><input id="routeSpeed" type="number" min="30" max="100" step="5" value="60"></div>
+    <div class="field" style="max-width:180px"><label for="mapScale">지도 축척</label><select id="mapScale"><option value="0.16">넓게 (1 m / 160 px)</option><option value="0.22" selected>보통 (1 m / 220 px)</option><option value="0.32">확대 (1 m / 320 px)</option></select></div>
+  </div>
+  <div class="route-actions">
+    <button id="undo" class="secondary">마지막 점 삭제</button>
+    <button id="clearRoute" class="secondary">경로 초기화</button>
+    <button id="upload" class="green">경로 전송</button>
+    <button id="start">경로 주행 START</button>
+  </div>
+</section>
+
+<section class="card">
+  <div class="section-title">2. 조이스틱 수동 조종</div>
+  <p class="muted">조이스틱을 움직이는 동안 주행 명령을 유지해. 위 = 전진, 아래 = 후진, 왼쪽 = 좌회전, 오른쪽 = 우회전. 손을 떼면 자동 정지해.</p>
+  <div class="joy-layout">
+    <div class="joy-wrap">
+      <div id="joystick" class="joystick" role="application" aria-label="수동 주행 조이스틱">
+        <span class="joy-direction joy-up">전진 +X</span><span class="joy-direction joy-down">후진 −X</span><span class="joy-direction joy-left">좌회전</span><span class="joy-direction joy-right">우회전</span>
+        <div id="joyKnob" class="joy-knob"></div>
+      </div>
+    </div>
+    <div class="joy-readout">
+      <div class="readout"><div class="readout-label">목표 선속도</div><div id="joyV" class="readout-value">0 mm/s</div></div>
+      <div class="readout"><div class="readout-label">목표 각속도</div><div id="joyW" class="readout-value">0.00 rad/s</div></div>
+      <div class="readout"><div class="readout-label">조작 상태</div><div id="joyState" class="readout-value">정지</div></div>
+    </div>
+  </div>
+  <div class="row" style="margin-top:10px;align-items:end">
+    <div class="field"><label for="manualSpeed">수동 최대 속도: <span id="manualSpeedText">50 mm/s</span></label><input id="manualSpeed" type="range" min="30" max="100" step="5" value="50"></div>
+    <div class="field"><label for="manualTurn">회전 민감도: <span id="manualTurnText">0.9 rad/s</span></label><input id="manualTurn" type="range" min="0.3" max="1.5" step="0.1" value="0.9"></div>
+  </div>
+  <div class="route-actions">
+    <button id="manualStop" class="stop">수동 정지</button>
+    <button id="stop" class="secondary">주행 STOP</button>
     <button id="estop" class="stop">비상정지</button>
     <button id="clearEstop" class="secondary">비상정지 해제</button>
     <button id="resetOdom" class="secondary">현재 위치를 원점으로</button>
   </div>
-</div>
-<div class="card">
-  <strong>수동 저속 테스트</strong>
-  <p class="muted">바퀴를 바닥에서 띄운 상태에서 먼저 테스트하세요. 버튼을 누르고 있는 동안에만 명령이 유지됩니다.</p>
-  <div class="row">
-    <button id="forward">전진</button>
-    <button id="reverse" class="secondary">후진</button>
-    <button id="left" class="secondary">좌회전</button>
-    <button id="right" class="secondary">우회전</button>
-  </div>
-</div>
-<div class="card">
-  <strong>통신 로그</strong>
-  <div id="log"></div>
-</div>
+  <p class="danger-note">최초 테스트는 차체를 받침대에 올려 구동륜을 띄운 상태에서 30–50 mm/s로 진행해. 비상정지는 일반 STOP과 달리 해제 명령을 보내기 전까지 주행을 차단해.</p>
+</section>
+
+<section class="card">
+  <div class="section-title">통신 로그</div>
+  <div id="log" aria-live="polite"></div>
+</section>
+
 <script>
-const SERVICE_UUID = '8f9a0001-6c2e-4c1a-9d21-55a0a1110000';
-const RX_UUID      = '8f9a0002-6c2e-4c1a-9d21-55a0a1110000';
-const TX_UUID      = '8f9a0003-6c2e-4c1a-9d21-55a0a1110000';
-const SAFE_CHUNK = 18;
-const MAX_POINTS = 16;
-const SCALE = 0.38; // screen pixels per mm
-const canvas = document.getElementById('map');
-const ctx = canvas.getContext('2d');
-const origin = {x: canvas.width/2, y: canvas.height-42};
-let points = [[0,0]];
-let currentPose = {x:0,y:0,theta:0};
-let device=null, server=null, rxChar=null, txChar=null;
-let rxText='';
-let lastManualHeartbeat=null;
+'use strict';
+const SERVICE_UUID='8f9a0001-6c2e-4c1a-9d21-55a0a1110000';
+const RX_UUID='8f9a0002-6c2e-4c1a-9d21-55a0a1110000';
+const TX_UUID='8f9a0003-6c2e-4c1a-9d21-55a0a1110000';
+const SAFE_CHUNK=18, MAX_POINTS=16, MAX_COORD=5000;
+const canvas=document.getElementById('map'), ctx=canvas.getContext('2d');
+const origin={x:canvas.width/2,y:canvas.height/2};
+let scale=0.22, points=[[0,0]], currentPose={x:0,y:0,theta:0};
+let device=null, server=null, rxChar=null, txChar=null, rxText='';
+let txQueue=Promise.resolve(), manualTimer=null, manualActive=false, driveBusy=false;
+let joy={x:0,y:0,pointerId:null};
+let lastStatus=null;
+const $=id=>document.getElementById(id);
 
-function log(s){const e=document.getElementById('log');e.textContent += s+'\n';e.scrollTop=e.scrollHeight;}
-function setBle(s){document.getElementById('bleState').textContent=s;}
-function worldToScreen(x,y){return {x:origin.x-y*SCALE,y:origin.y-x*SCALE};}
-function screenToWorld(px,py){return {x:(origin.y-py)/SCALE,y:(origin.x-px)/SCALE};}
+function log(message){const e=$('log');const stamp=new Date().toLocaleTimeString();e.textContent+=`[${stamp}] ${message}\n`;const lines=e.textContent.split('\n');if(lines.length>80)e.textContent=lines.slice(-80).join('\n');e.scrollTop=e.scrollHeight;}
+function setBle(text,ok=false){$('bleState').textContent=text;$('bleState').className='pill'+(ok?' ok':'');}
+function signed(v,d=1){return `${v>=0?'+':''}${v.toFixed(d)}`;}
+function worldToScreen(x,y){return {x:origin.x-y*scale,y:origin.y-x*scale};}
+function screenToWorld(px,py){return {x:(origin.y-py)/scale,y:(origin.x-px)/scale};}
+function fmtPoint(p){return `(${signed(p[0],0)}, ${signed(p[1],0)}) mm`;}
+
 function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle='#fbfcfe';ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.strokeStyle='#e8edf2';ctx.lineWidth=1;
-  const step=50*SCALE;
-  for(let x=origin.x%step;x<canvas.width;x+=step){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();}
-  for(let y=origin.y%step;y<canvas.height;y+=step){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
-  ctx.strokeStyle='#76899b';ctx.lineWidth=2;
-  ctx.beginPath();ctx.moveTo(origin.x,origin.y);ctx.lineTo(origin.x,20);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(20,origin.y);ctx.lineTo(canvas.width-20,origin.y);ctx.stroke();
-  ctx.fillStyle='#34495e';ctx.font='13px sans-serif';ctx.fillText('+X 전방',origin.x+8,24);ctx.fillText('+Y 좌측',canvas.width-78,origin.y-10);
-  if(points.length>1){ctx.strokeStyle='#21966f';ctx.lineWidth=4;ctx.beginPath();points.forEach((p,i)=>{const q=worldToScreen(p[0],p[1]);if(i===0)ctx.moveTo(q.x,q.y);else ctx.lineTo(q.x,q.y);});ctx.stroke();}
-  points.forEach((p,i)=>{const q=worldToScreen(p[0],p[1]);ctx.beginPath();ctx.arc(q.x,q.y,i===0?8:7,0,Math.PI*2);ctx.fillStyle=i===0?'#1b6ac9':'#21966f';ctx.fill();ctx.fillStyle='#14202b';ctx.font='12px sans-serif';ctx.fillText(i===0?'START':String(i),q.x+9,q.y-9);});
-  const car=worldToScreen(currentPose.x,currentPose.y);ctx.save();ctx.translate(car.x,car.y);ctx.rotate(-currentPose.theta);ctx.fillStyle='#e58c24';ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(10,11);ctx.lineTo(0,7);ctx.lineTo(-10,11);ctx.closePath();ctx.fill();ctx.restore();
-  document.getElementById('pointsCount').textContent=`${points.length} / ${MAX_POINTS} 점`;
+  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#fbfcfe';ctx.fillRect(0,0,canvas.width,canvas.height);
+  const halfX=Math.ceil((canvas.height/2/scale)/100)*100,halfY=Math.ceil((canvas.width/2/scale)/100)*100;
+  ctx.lineWidth=1;ctx.strokeStyle='#e8edf2';
+  for(let x=-halfX;x<=halfX;x+=100){const sy=origin.y-x*scale;ctx.beginPath();ctx.moveTo(0,sy);ctx.lineTo(canvas.width,sy);ctx.stroke();}
+  for(let y=-halfY;y<=halfY;y+=100){const sx=origin.x-y*scale;ctx.beginPath();ctx.moveTo(sx,0);ctx.lineTo(sx,canvas.height);ctx.stroke();}
+  // Coordinate axes: +X points upward, +Y points left.
+  ctx.strokeStyle='#52677d';ctx.lineWidth=2.2;ctx.beginPath();ctx.moveTo(origin.x,8);ctx.lineTo(origin.x,canvas.height-8);ctx.stroke();ctx.beginPath();ctx.moveTo(8,origin.y);ctx.lineTo(canvas.width-8,origin.y);ctx.stroke();
+  ctx.fillStyle='#34495e';ctx.font='bold 14px system-ui';ctx.fillText('+X 전방',origin.x+10,19);ctx.fillText('−X 후방',origin.x+10,canvas.height-10);ctx.fillText('+Y 좌측',9,origin.y-10);ctx.fillText('−Y 우측',canvas.width-85,origin.y-10);
+  // Label selected axis ticks.
+  ctx.font='10px system-ui';ctx.fillStyle='#7a8a9a';
+  for(let x=-halfX;x<=halfX;x+=200){if(x===0)continue;const sy=origin.y-x*scale;if(sy>18&&sy<canvas.height-12)ctx.fillText(String(x),origin.x+5,sy-3);}
+  for(let y=-halfY;y<=halfY;y+=200){if(y===0)continue;const sx=origin.x-y*scale;if(sx>8&&sx<canvas.width-30)ctx.fillText(String(y),sx+3,origin.y+13);}
+  // Route polyline.
+  if(points.length>1){ctx.strokeStyle='#18865f';ctx.lineWidth=3.5;ctx.beginPath();points.forEach((p,i)=>{const q=worldToScreen(p[0],p[1]);if(i===0)ctx.moveTo(q.x,q.y);else ctx.lineTo(q.x,q.y);});ctx.stroke();}
+  points.forEach((p,i)=>{const q=worldToScreen(p[0],p[1]);ctx.beginPath();ctx.arc(q.x,q.y,i===0?8:6,0,Math.PI*2);ctx.fillStyle=i===0?'#1e6bd6':'#18865f';ctx.fill();ctx.lineWidth=2;ctx.strokeStyle='white';ctx.stroke();ctx.fillStyle='#17202a';ctx.font='bold 11px system-ui';ctx.fillText(i===0?'P0':`P${i}`,q.x+9,q.y-8);});
+  // Current robot symbol; heading zero points +X (up).
+  const car=worldToScreen(currentPose.x,currentPose.y);ctx.save();ctx.translate(car.x,car.y);ctx.rotate(-currentPose.theta);ctx.fillStyle='#ef922b';ctx.strokeStyle='#9a5410';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(0,-16);ctx.lineTo(12,12);ctx.lineTo(0,7);ctx.lineTo(-12,12);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+  ctx.fillStyle='#17202a';ctx.font='bold 11px system-ui';ctx.fillText(`차량 ${signed(currentPose.x)} , ${signed(currentPose.y)} mm`,Math.min(canvas.width-160,car.x+12),Math.max(34,car.y-12));
+  $('pointList').innerHTML='';
+  points.forEach((p,i)=>{
+    const row=document.createElement('div');row.className='coord-item';
+    const label=document.createElement('span');label.className='coord-type';label.textContent=i===0?'P0 · START':`P${i} · WAYPOINT`;
+    const coords=document.createElement('span');coords.className='coord-text';coords.textContent=fmtPoint(p);
+    row.append(label,coords);
+    if(i>0){const del=document.createElement('button');del.className='secondary';del.textContent='삭제';del.setAttribute('aria-label',`P${i} 삭제`);del.onclick=()=>{points.splice(i,1);draw();};row.append(del);}
+    $('pointList').append(row);
+  });
+  $('telemetryText').textContent=`경로점 ${points.length}/${MAX_POINTS}개 · 현재 좌표는 오도메트리 추정값 (GPS 아님) · 지도 축척 ${Math.round(scale*1000)} px/m`;
 }
-canvas.addEventListener('click',e=>{if(points.length>=MAX_POINTS){log('경유점은 최대 16개까지 가능합니다.');return;}const r=canvas.getBoundingClientRect();const px=(e.clientX-r.left)*canvas.width/r.width;const py=(e.clientY-r.top)*canvas.height/r.height;const p=screenToWorld(px,py);if(p.x<0){log('출발점 뒤쪽(-X)은 이 경로 편집기에서 추가하지 않도록 제한했습니다.');return;}points.push([Math.round(p.x),Math.round(p.y)]);draw();});
 
-document.getElementById('undo').onclick=()=>{if(points.length>1)points.pop();draw();};
-document.getElementById('clear').onclick=()=>{points=[[0,0]];draw();};
+function updatePoseDisplay(){
+  $('poseX').innerHTML=`${signed(currentPose.x)} <small>mm</small>`;
+  $('poseY').innerHTML=`${signed(currentPose.y)} <small>mm</small>`;
+  $('poseHeading').innerHTML=`${signed(currentPose.theta*180/Math.PI)} <small>°</small>`;
+  draw();
+}
+function addPoint(x,y){
+  if(points.length>=MAX_POINTS){alert(`경로점은 시작점을 포함해 최대 ${MAX_POINTS}개입니다.`);return false;}
+  if(!Number.isFinite(x)||!Number.isFinite(y)||Math.abs(x)>MAX_COORD||Math.abs(y)>MAX_COORD){alert(`X와 Y는 각각 −${MAX_COORD}~+${MAX_COORD} mm 범위여야 합니다.`);return false;}
+  points.push([Math.round(x),Math.round(y)]);draw();return true;
+}
+canvas.addEventListener('click',e=>{
+  const r=canvas.getBoundingClientRect();const px=(e.clientX-r.left)*canvas.width/r.width;const py=(e.clientY-r.top)*canvas.height/r.height;const p=screenToWorld(px,py);addPoint(p.x,p.y);
+});
+$('addCoord').onclick=()=>{
+  const x=Number($('coordX').value),y=Number($('coordY').value);
+  if($('coordX').value.trim()===''||$('coordY').value.trim()===''){alert('X와 Y 좌표를 모두 입력해 주세요.');return;}
+  if(addPoint(x,y)){$('coordX').value='';$('coordY').value='';$('coordX').focus();}
+};
+$('coordY').addEventListener('keydown',e=>{if(e.key==='Enter')$('addCoord').click();});
+$('undo').onclick=()=>{if(points.length>1)points.pop();draw();};
+$('clearRoute').onclick=()=>{points=[[0,0]];draw();};
+$('mapScale').onchange=()=>{scale=Number($('mapScale').value)||0.22;draw();};
 
 async function sendRawLine(line){
-  if(!rxChar)throw new Error('BLE가 연결되지 않았습니다.');
   const bytes=new TextEncoder().encode(line+'\n');
   for(let i=0;i<bytes.length;i+=SAFE_CHUNK){
-    const part=bytes.slice(i,Math.min(i+SAFE_CHUNK,bytes.length));
-    await rxChar.writeValueWithResponse(part);
+    if(!rxChar)throw new Error('BLE가 연결되지 않았습니다.');
+    const chunk=bytes.slice(i,Math.min(i+SAFE_CHUNK,bytes.length));
+    if(typeof rxChar.writeValueWithResponse==='function')await rxChar.writeValueWithResponse(chunk);else await rxChar.writeValue(chunk);
   }
 }
-async function sendCommand(obj){await sendRawLine(JSON.stringify(obj));log('TX '+JSON.stringify(obj));}
+function sendCommand(obj,quiet=false){
+  const line=JSON.stringify(obj);
+  const task=txQueue.then(()=>sendRawLine(line));
+  txQueue=task.catch(err=>{if(!quiet)log('TX 오류: '+err.message);});
+  if(!quiet)log('TX '+line);
+  return task;
+}
 
+function statusState(s){
+  $('robotState').textContent=s||'UNKNOWN';
+  $('robotState').className='pill'+(['READY','ROUTE_READY','MANUAL'].includes(s)?' ok':(['ESTOP','MOTOR_ERROR','LINK_LOST'].includes(s)?' bad':''));
+}
 function handleTelemetry(line){
   try{
     const d=JSON.parse(line);
     if(d.type==='STATUS'){
-      document.getElementById('robotState').textContent=d.state||'unknown';
-      currentPose={x:Number(d.x_mm||0),y:Number(d.y_mm||0),theta:Number(d.theta_deg||0)*Math.PI/180};
-      document.getElementById('poseText').textContent=`x=${currentPose.x.toFixed(1)} mm, y=${currentPose.y.toFixed(1)} mm, heading=${(currentPose.theta*180/Math.PI).toFixed(1)}° | waypoint ${d.wp}/${d.n}`;
-      draw();
+      lastStatus=d;statusState(d.state);
+      currentPose={x:Number(d.x_mm)||0,y:Number(d.y_mm)||0,theta:(Number(d.theta_deg)||0)*Math.PI/180};
+      updatePoseDisplay();
+      const wp=Number(d.wp)||0,n=Number(d.n)||0;
+      $('telemetryText').textContent=`상태 ${d.state||'UNKNOWN'} · 경로점 ${wp}/${n} · 좌 RPM ${Number(d.left_rpm||0).toFixed(1)} · 우 RPM ${Number(d.right_rpm||0).toFixed(1)} · 오도메트리 추정값`;
     }else if(d.type==='XIAO_STATUS'){
-      log('XIAO camera: '+d.camera);
+      log('카메라 상태: '+d.camera);
     }else if(d.type==='ERROR'){
-      log('ERROR '+(d.reason||''));
+      log('오류: '+(d.reason||'unknown'));
     }else log('RX '+line);
-  }catch(e){log('RX '+line);}
+  }catch(err){log('RX '+line);}
 }
 function onNotification(event){
-  const bytes=new Uint8Array(event.target.value.buffer);
+  const value=event.target.value;const bytes=new Uint8Array(value.buffer,value.byteOffset,value.byteLength);
   for(const b of bytes){const c=String.fromCharCode(b);if(c==='\n'){if(rxText.length)handleTelemetry(rxText);rxText='';}else if(c!=='\r'&&rxText.length<1024){rxText+=c;}}
 }
-
+function setConnected(connected){
+  $('connect').disabled=connected;$('disconnect').disabled=!connected;
+  if(!connected){setBle('BLE 연결 끊김');statusState('LINK_LOST');endJoystick(false);}
+}
 async function connect(){
-  if(!navigator.bluetooth){alert('이 브라우저는 Web Bluetooth를 지원하지 않습니다. Android Chrome을 사용하세요.');return;}
+  if(!navigator.bluetooth){alert('Web Bluetooth를 지원하는 Android Chrome에서 실행해 주세요.');return;}
   try{
     device=await navigator.bluetooth.requestDevice({filters:[{services:[SERVICE_UUID]}]});
-    device.addEventListener('gattserverdisconnected',()=>{setBle('연결 끊김');rxChar=null;txChar=null;document.getElementById('connect').disabled=false;document.getElementById('disconnect').disabled=true;});
-    server=await device.gatt.connect();
-    const service=await server.getPrimaryService(SERVICE_UUID);
-    rxChar=await service.getCharacteristic(RX_UUID);
-    txChar=await service.getCharacteristic(TX_UUID);
+    device.addEventListener('gattserverdisconnected',()=>{rxChar=null;txChar=null;setConnected(false);log('BLE 연결이 끊어졌습니다.');});
+    server=await device.gatt.connect();const service=await server.getPrimaryService(SERVICE_UUID);
+    rxChar=await service.getCharacteristic(RX_UUID);txChar=await service.getCharacteristic(TX_UUID);
     await txChar.startNotifications();txChar.addEventListener('characteristicvaluechanged',onNotification);
-    setBle('연결됨: '+device.name);document.getElementById('connect').disabled=true;document.getElementById('disconnect').disabled=false;
-    log('BLE connected to '+device.name);
+    setBle('연결됨: '+(device.name||'XIAO'),true);setConnected(true);log('BLE 연결 성공: '+(device.name||'XIAO'));
     await sendCommand({cmd:'GET_STATUS'});
-  }catch(e){setBle('연결 실패');log('BLE error: '+e.message);}
+  }catch(err){setBle('연결 실패');log('BLE 오류: '+err.message);}
 }
-async function disconnect(){try{if(rxChar)await sendCommand({cmd:'STOP'});}catch(e){}if(device?.gatt?.connected)device.gatt.disconnect();}
-
-document.getElementById('connect').onclick=connect;
-document.getElementById('disconnect').onclick=disconnect;
-document.getElementById('upload').onclick=async()=>{
-  if(points.length<2){alert('시작점 외에 경유점을 하나 이상 추가하세요.');return;}
-  const speed=Math.max(30,Math.min(100,Number(document.getElementById('speed').value)||80));
-  try{await sendCommand({cmd:'SET_ROUTE',points:points,max_speed_mm_s:speed});log('경로 전송 완료. 차량 상태가 ROUTE_READY인지 확인하세요.');}catch(e){log(e.message);}
+async function disconnect(){endJoystick(false);try{if(rxChar)await sendCommand({cmd:'STOP'});}catch(e){}if(device?.gatt?.connected)device.gatt.disconnect();}
+$('connect').onclick=connect;$('disconnect').onclick=disconnect;
+$('upload').onclick=async()=>{
+  if(!rxChar){alert('먼저 XIAO에 연결해 주세요.');return;}
+  if(points.length<2){alert('P0 외에 경유점을 하나 이상 추가해 주세요.');return;}
+  const speed=Math.max(30,Math.min(100,Number($('routeSpeed').value)||60));
+  try{endJoystick(false);await sendCommand({cmd:'STOP'});await sendCommand({cmd:'SET_ROUTE',points:points,max_speed_mm_s:speed});log('경로 전송 완료. 차량 상태가 ROUTE_READY인지 확인하세요.');}catch(err){log(err.message);}
 };
-document.getElementById('start').onclick=async()=>{try{await sendCommand({cmd:'START'});}catch(e){log(e.message);}};
-document.getElementById('stop').onclick=async()=>{try{await sendCommand({cmd:'STOP'});}catch(e){log(e.message);}};
-document.getElementById('estop').onclick=async()=>{try{await sendCommand({cmd:'ESTOP'});}catch(e){log(e.message);}};
-document.getElementById('clearEstop').onclick=async()=>{try{await sendCommand({cmd:'CLEAR_ESTOP'});}catch(e){log(e.message);}};
-document.getElementById('resetOdom').onclick=async()=>{if(!confirm('차량을 정지시킨 뒤 현재 위치를 (0,0) 원점으로 설정할까요?'))return;try{await sendCommand({cmd:'STOP'});await sendCommand({cmd:'RESET_ODOM'});currentPose={x:0,y:0,theta:0};draw();}catch(e){log(e.message);}};
+$('start').onclick=async()=>{try{if(!rxChar)throw new Error('먼저 XIAO에 연결해 주세요.');await sendCommand({cmd:'START'});}catch(err){log(err.message);}};
+async function stopVehicle(){endJoystick(false);try{if(rxChar)await sendCommand({cmd:'STOP'});}catch(err){log(err.message);}}
+$('stop').onclick=stopVehicle;$('manualStop').onclick=stopVehicle;
+$('estop').onclick=async()=>{endJoystick(false);try{if(!rxChar)throw new Error('먼저 XIAO에 연결해 주세요.');await sendCommand({cmd:'ESTOP'});}catch(err){log(err.message);}};
+$('clearEstop').onclick=async()=>{try{if(!rxChar)throw new Error('먼저 XIAO에 연결해 주세요.');await sendCommand({cmd:'CLEAR_ESTOP'});}catch(err){log(err.message);}};
+$('resetOdom').onclick=async()=>{
+  if(!confirm('차량을 정지시킨 뒤 현재 위치를 (0,0), 방향을 +X(0°)로 재설정할까요?'))return;
+  try{endJoystick(false);await sendCommand({cmd:'STOP'});await sendCommand({cmd:'RESET_ODOM'});currentPose={x:0,y:0,theta:0};points=[[0,0]];updatePoseDisplay();}
+  catch(err){log(err.message);}
+};
 
-function manualButton(id,v,w){
-  const el=document.getElementById(id);let timer=null;
-  const issue=async()=>{try{await sendCommand({cmd:'DRIVE',v_mm_s:v,omega_rad_s:w});}catch(err){log(err.message);}};
-  const down=async e=>{e.preventDefault();if(timer!==null)return;await issue();timer=setInterval(issue,150);};
-  const up=async e=>{e.preventDefault();if(timer!==null){clearInterval(timer);timer=null;}try{await sendCommand({cmd:'STOP'});}catch(err){}};
-  el.addEventListener('pointerdown',down);['pointerup','pointerleave','pointercancel'].forEach(ev=>el.addEventListener(ev,up));
+// Hold-to-run virtual joystick. Up = +X velocity; left = +angular velocity (turn left).
+const joyEl=$('joystick'),knob=$('joyKnob'),JOY_RADIUS=joyEl.clientWidth*0.34;
+function renderJoystick(){
+  const radius=joyEl.clientWidth*0.34;const px=joy.x*radius,py=joy.y*radius;
+  knob.style.transform=`translate(${px}px, ${py}px)`;
+  const maxV=Number($('manualSpeed').value),maxW=Number($('manualTurn').value);
+  const dead=0.08;const normX=Math.abs(joy.x)<dead?0:joy.x;const normY=Math.abs(joy.y)<dead?0:joy.y;
+  const v=Math.round(-normY*maxV);const omega=Number((-normX*maxW).toFixed(2));
+  $('joyV').textContent=`${v} mm/s`;$('joyW').textContent=`${omega.toFixed(2)} rad/s`;
+  $('joyState').textContent=manualActive?'조종 중':'정지';
+  return {v,omega};
 }
-manualButton('forward',50,0);manualButton('reverse',-50,0);manualButton('left',0,0.8);manualButton('right',0,-0.8);
+function updateJoystickFromPointer(e){
+  const rect=joyEl.getBoundingClientRect();const cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+  let dx=(e.clientX-cx)/(rect.width*0.38),dy=(e.clientY-cy)/(rect.height*0.38);
+  const mag=Math.hypot(dx,dy);if(mag>1){dx/=mag;dy/=mag;}joy.x=dx;joy.y=dy;renderJoystick();
+}
+async function joystickTick(){
+  if(!manualActive||!rxChar||driveBusy)return;
+  const cmd=renderJoystick();driveBusy=true;
+  try{await sendCommand({cmd:'DRIVE',v_mm_s:cmd.v,omega_rad_s:cmd.omega},true);}catch(err){log('조이스틱 명령 오류: '+err.message);endJoystick(false);}finally{driveBusy=false;}
+}
+function startJoystick(e){
+  if(!rxChar){log('먼저 XIAO를 연결하세요.');return;}
+  if(lastStatus?.state==='ESTOP'||lastStatus?.state==='MOTOR_ERROR'||lastStatus?.state==='LINK_LOST'){log('현재 상태에서는 수동 조종할 수 없습니다. 상태를 확인하세요.');return;}
+  if(joy.pointerId!==null)return;e.preventDefault();joy.pointerId=e.pointerId;joyEl.setPointerCapture(e.pointerId);manualActive=true;
+  updateJoystickFromPointer(e);$('joyState').textContent='조종 중';joystickTick();manualTimer=setInterval(joystickTick,120);
+}
+function moveJoystick(e){if(joy.pointerId!==e.pointerId)return;e.preventDefault();updateJoystickFromPointer(e);}
+function endJoystick(sendStop=true){
+  if(manualTimer!==null){clearInterval(manualTimer);manualTimer=null;}manualActive=false;joy.pointerId=null;joy.x=0;joy.y=0;renderJoystick();$('joyState').textContent='정지';
+  if(sendStop&&rxChar)sendCommand({cmd:'STOP'}).catch(()=>{});
+}
+joyEl.addEventListener('pointerdown',startJoystick);joyEl.addEventListener('pointermove',moveJoystick);
+['pointerup','pointercancel','lostpointercapture'].forEach(ev=>joyEl.addEventListener(ev,e=>{if(joy.pointerId===e.pointerId)endJoystick(true);}));
+$('manualSpeed').oninput=()=>{$('manualSpeedText').textContent=$('manualSpeed').value+' mm/s';renderJoystick();};
+$('manualTurn').oninput=()=>{$('manualTurnText').textContent=Number($('manualTurn').value).toFixed(1)+' rad/s';renderJoystick();};
+window.addEventListener('blur',()=>endJoystick(true));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)endJoystick(true);});
+window.addEventListener('pagehide',()=>{if(rxChar){try{sendCommand({cmd:'STOP'},true);}catch(e){}}});
 
-draw();
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker registration failed:', err)));
-}
+updatePoseDisplay();renderJoystick();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').then(reg=>reg.update()).catch(err=>console.warn('Service worker registration failed:',err)));}
 </script>
 </body>
 </html>
