@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17202a">
+<meta name="description" content="BLE route controller for the mini police robot car">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<title>Police Car BLE Controller</title>
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17202a;background:#eef2f6}
+body{margin:0;padding:16px;max-width:920px;margin-inline:auto}
+h1{font-size:1.35rem;margin:.3rem 0 1rem}
+.card{background:white;border-radius:14px;padding:14px;margin:12px 0;box-shadow:0 2px 10px #17202a12}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{border:0;border-radius:10px;padding:11px 14px;background:#1e6bd6;color:white;font-weight:650;font-size:.95rem}
+button.secondary{background:#566575}button.stop{background:#b72a35}button:disabled{opacity:.45}
+label{font-size:.9rem;color:#425466}input{padding:8px;border:1px solid #ccd5df;border-radius:8px;width:90px}
+#map{width:100%;height:auto;background:#fbfcfe;border:1px solid #d8e0e8;border-radius:10px;touch-action:manipulation}
+#log{height:105px;overflow:auto;background:#101820;color:#d5e5ef;padding:9px;border-radius:8px;font:12px ui-monospace,monospace;white-space:pre-wrap}
+.status{font-weight:700}.muted{font-size:.82rem;color:#657786}.danger{color:#b72a35;font-weight:700}
+</style>
+</head>
+<body>
+<h1>경찰차 BLE 경로 컨트롤러</h1>
+<div class="card">
+  <div class="row">
+    <button id="connect">XIAO 연결</button>
+    <button id="disconnect" class="secondary" disabled>연결 해제</button>
+    <span class="status" id="bleState">연결 안 됨</span>
+  </div>
+  <p class="muted">Android Chrome 권장. BLE 연결은 HTTPS 또는 localhost에서 동작합니다. 차량은 정지한 상태에서 먼저 연결하세요.</p>
+  <div>차량 상태: <span id="robotState" class="status">알 수 없음</span></div>
+  <div class="muted" id="poseText">x=0, y=0, heading=0°</div>
+</div>
+<div class="card">
+  <strong>경로 편집</strong>
+  <p class="muted">격자 화면을 눌러 경유점을 추가하세요. 화면 위쪽이 차량 전방(+X), 화면 왼쪽이 차량 좌측(+Y)입니다. 시작점은 (0,0)으로 고정됩니다.</p>
+  <canvas id="map" width="720" height="520"></canvas>
+  <div class="row" style="margin-top:10px">
+    <label>속도 <input id="speed" type="number" min="30" max="100" step="10" value="80"> mm/s</label>
+    <button id="undo" class="secondary">마지막 점 취소</button>
+    <button id="clear" class="secondary">경로 초기화</button>
+    <span class="muted" id="pointsCount">1 / 16 점</span>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="upload">경로 전송</button>
+    <button id="start">START</button>
+    <button id="stop" class="stop">STOP</button>
+    <button id="estop" class="stop">비상정지</button>
+    <button id="clearEstop" class="secondary">비상정지 해제</button>
+    <button id="resetOdom" class="secondary">현재 위치를 원점으로</button>
+  </div>
+</div>
+<div class="card">
+  <strong>수동 저속 테스트</strong>
+  <p class="muted">바퀴를 바닥에서 띄운 상태에서 먼저 테스트하세요. 버튼을 누르고 있는 동안에만 명령이 유지됩니다.</p>
+  <div class="row">
+    <button id="forward">전진</button>
+    <button id="reverse" class="secondary">후진</button>
+    <button id="left" class="secondary">좌회전</button>
+    <button id="right" class="secondary">우회전</button>
+  </div>
+</div>
+<div class="card">
+  <strong>통신 로그</strong>
+  <div id="log"></div>
+</div>
+<script>
+const SERVICE_UUID = '8f9a0001-6c2e-4c1a-9d21-55a0a1110000';
+const RX_UUID      = '8f9a0002-6c2e-4c1a-9d21-55a0a1110000';
+const TX_UUID      = '8f9a0003-6c2e-4c1a-9d21-55a0a1110000';
+const SAFE_CHUNK = 18;
+const MAX_POINTS = 16;
+const SCALE = 0.38; // screen pixels per mm
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+const origin = {x: canvas.width/2, y: canvas.height-42};
+let points = [[0,0]];
+let currentPose = {x:0,y:0,theta:0};
+let device=null, server=null, rxChar=null, txChar=null;
+let rxText='';
+let lastManualHeartbeat=null;
+
+function log(s){const e=document.getElementById('log');e.textContent += s+'\n';e.scrollTop=e.scrollHeight;}
+function setBle(s){document.getElementById('bleState').textContent=s;}
+function worldToScreen(x,y){return {x:origin.x-y*SCALE,y:origin.y-x*SCALE};}
+function screenToWorld(px,py){return {x:(origin.y-py)/SCALE,y:(origin.x-px)/SCALE};}
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#fbfcfe';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='#e8edf2';ctx.lineWidth=1;
+  const step=50*SCALE;
+  for(let x=origin.x%step;x<canvas.width;x+=step){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();}
+  for(let y=origin.y%step;y<canvas.height;y+=step){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
+  ctx.strokeStyle='#76899b';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(origin.x,origin.y);ctx.lineTo(origin.x,20);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(20,origin.y);ctx.lineTo(canvas.width-20,origin.y);ctx.stroke();
+  ctx.fillStyle='#34495e';ctx.font='13px sans-serif';ctx.fillText('+X 전방',origin.x+8,24);ctx.fillText('+Y 좌측',canvas.width-78,origin.y-10);
+  if(points.length>1){ctx.strokeStyle='#21966f';ctx.lineWidth=4;ctx.beginPath();points.forEach((p,i)=>{const q=worldToScreen(p[0],p[1]);if(i===0)ctx.moveTo(q.x,q.y);else ctx.lineTo(q.x,q.y);});ctx.stroke();}
+  points.forEach((p,i)=>{const q=worldToScreen(p[0],p[1]);ctx.beginPath();ctx.arc(q.x,q.y,i===0?8:7,0,Math.PI*2);ctx.fillStyle=i===0?'#1b6ac9':'#21966f';ctx.fill();ctx.fillStyle='#14202b';ctx.font='12px sans-serif';ctx.fillText(i===0?'START':String(i),q.x+9,q.y-9);});
+  const car=worldToScreen(currentPose.x,currentPose.y);ctx.save();ctx.translate(car.x,car.y);ctx.rotate(-currentPose.theta);ctx.fillStyle='#e58c24';ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(10,11);ctx.lineTo(0,7);ctx.lineTo(-10,11);ctx.closePath();ctx.fill();ctx.restore();
+  document.getElementById('pointsCount').textContent=`${points.length} / ${MAX_POINTS} 점`;
+}
+canvas.addEventListener('click',e=>{if(points.length>=MAX_POINTS){log('경유점은 최대 16개까지 가능합니다.');return;}const r=canvas.getBoundingClientRect();const px=(e.clientX-r.left)*canvas.width/r.width;const py=(e.clientY-r.top)*canvas.height/r.height;const p=screenToWorld(px,py);if(p.x<0){log('출발점 뒤쪽(-X)은 이 경로 편집기에서 추가하지 않도록 제한했습니다.');return;}points.push([Math.round(p.x),Math.round(p.y)]);draw();});
+
+document.getElementById('undo').onclick=()=>{if(points.length>1)points.pop();draw();};
+document.getElementById('clear').onclick=()=>{points=[[0,0]];draw();};
+
+async function sendRawLine(line){
+  if(!rxChar)throw new Error('BLE가 연결되지 않았습니다.');
+  const bytes=new TextEncoder().encode(line+'\n');
+  for(let i=0;i<bytes.length;i+=SAFE_CHUNK){
+    const part=bytes.slice(i,Math.min(i+SAFE_CHUNK,bytes.length));
+    await rxChar.writeValueWithResponse(part);
+  }
+}
+async function sendCommand(obj){await sendRawLine(JSON.stringify(obj));log('TX '+JSON.stringify(obj));}
+
+function handleTelemetry(line){
+  try{
+    const d=JSON.parse(line);
+    if(d.type==='STATUS'){
+      document.getElementById('robotState').textContent=d.state||'unknown';
+      currentPose={x:Number(d.x_mm||0),y:Number(d.y_mm||0),theta:Number(d.theta_deg||0)*Math.PI/180};
+      document.getElementById('poseText').textContent=`x=${currentPose.x.toFixed(1)} mm, y=${currentPose.y.toFixed(1)} mm, heading=${(currentPose.theta*180/Math.PI).toFixed(1)}° | waypoint ${d.wp}/${d.n}`;
+      draw();
+    }else if(d.type==='XIAO_STATUS'){
+      log('XIAO camera: '+d.camera);
+    }else if(d.type==='ERROR'){
+      log('ERROR '+(d.reason||''));
+    }else log('RX '+line);
+  }catch(e){log('RX '+line);}
+}
+function onNotification(event){
+  const bytes=new Uint8Array(event.target.value.buffer);
+  for(const b of bytes){const c=String.fromCharCode(b);if(c==='\n'){if(rxText.length)handleTelemetry(rxText);rxText='';}else if(c!=='\r'&&rxText.length<1024){rxText+=c;}}
+}
+
+async function connect(){
+  if(!navigator.bluetooth){alert('이 브라우저는 Web Bluetooth를 지원하지 않습니다. Android Chrome을 사용하세요.');return;}
+  try{
+    device=await navigator.bluetooth.requestDevice({filters:[{services:[SERVICE_UUID]}]});
+    device.addEventListener('gattserverdisconnected',()=>{setBle('연결 끊김');rxChar=null;txChar=null;document.getElementById('connect').disabled=false;document.getElementById('disconnect').disabled=true;});
+    server=await device.gatt.connect();
+    const service=await server.getPrimaryService(SERVICE_UUID);
+    rxChar=await service.getCharacteristic(RX_UUID);
+    txChar=await service.getCharacteristic(TX_UUID);
+    await txChar.startNotifications();txChar.addEventListener('characteristicvaluechanged',onNotification);
+    setBle('연결됨: '+device.name);document.getElementById('connect').disabled=true;document.getElementById('disconnect').disabled=false;
+    log('BLE connected to '+device.name);
+    await sendCommand({cmd:'GET_STATUS'});
+  }catch(e){setBle('연결 실패');log('BLE error: '+e.message);}
+}
+async function disconnect(){try{if(rxChar)await sendCommand({cmd:'STOP'});}catch(e){}if(device?.gatt?.connected)device.gatt.disconnect();}
+
+document.getElementById('connect').onclick=connect;
+document.getElementById('disconnect').onclick=disconnect;
+document.getElementById('upload').onclick=async()=>{
+  if(points.length<2){alert('시작점 외에 경유점을 하나 이상 추가하세요.');return;}
+  const speed=Math.max(30,Math.min(100,Number(document.getElementById('speed').value)||80));
+  try{await sendCommand({cmd:'SET_ROUTE',points:points,max_speed_mm_s:speed});log('경로 전송 완료. 차량 상태가 ROUTE_READY인지 확인하세요.');}catch(e){log(e.message);}
+};
+document.getElementById('start').onclick=async()=>{try{await sendCommand({cmd:'START'});}catch(e){log(e.message);}};
+document.getElementById('stop').onclick=async()=>{try{await sendCommand({cmd:'STOP'});}catch(e){log(e.message);}};
+document.getElementById('estop').onclick=async()=>{try{await sendCommand({cmd:'ESTOP'});}catch(e){log(e.message);}};
+document.getElementById('clearEstop').onclick=async()=>{try{await sendCommand({cmd:'CLEAR_ESTOP'});}catch(e){log(e.message);}};
+document.getElementById('resetOdom').onclick=async()=>{if(!confirm('차량을 정지시킨 뒤 현재 위치를 (0,0) 원점으로 설정할까요?'))return;try{await sendCommand({cmd:'STOP'});await sendCommand({cmd:'RESET_ODOM'});currentPose={x:0,y:0,theta:0};draw();}catch(e){log(e.message);}};
+
+function manualButton(id,v,w){
+  const el=document.getElementById(id);let timer=null;
+  const issue=async()=>{try{await sendCommand({cmd:'DRIVE',v_mm_s:v,omega_rad_s:w});}catch(err){log(err.message);}};
+  const down=async e=>{e.preventDefault();if(timer!==null)return;await issue();timer=setInterval(issue,150);};
+  const up=async e=>{e.preventDefault();if(timer!==null){clearInterval(timer);timer=null;}try{await sendCommand({cmd:'STOP'});}catch(err){}};
+  el.addEventListener('pointerdown',down);['pointerup','pointerleave','pointercancel'].forEach(ev=>el.addEventListener(ev,up));
+}
+manualButton('forward',50,0);manualButton('reverse',-50,0);manualButton('left',0,0.8);manualButton('right',0,-0.8);
+
+draw();
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker registration failed:', err)));
+}
+</script>
+</body>
+</html>
